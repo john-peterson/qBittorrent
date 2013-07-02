@@ -1,0 +1,63 @@
+language:
+# linux
+- cpp
+
+# osx
+# - objective-c
+
+env:
+# - lt=APT debug=false gui=true
+# - lt=repo debug=false gui=true
+# - lt=repo debug=true gui=true
+# - lt=repo debug=true gui=false
+- lt=APT debug=false gui=false
+
+install:
+# linux, osx
+- (cd src/geoip && wget http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz && gzip -d GeoIP.dat.gz)
+
+# linux
+# - nproc
+
+- shopt -s expand_aliases
+- alias sudo="sudo "
+- alias make=colormake
+- export MAKEFLAGS="-j $((`nproc` / 2))"
+
+- if $debug; then qtc="--enable-debug"; ltc="--enable-debug"; fi
+- if ! $gui; then qtc="$qtc --disable-gui"; fi
+
+- echo settings
+- echo $lt
+- echo $debug
+- echo $gui
+- echo $qtc
+- echo $ltc
+
+- sudo apt-get -qq update
+- sudo apt-get -qq install qconf
+- sudo apt-get -qq install debhelper libboost-dev libboost-filesystem-dev libboost-system-dev qconf colormake
+- if $gui; then sudo apt-get -qq install libqt4-dev; fi
+- if [[ "$lt" == "APT" ]]; then sudo apt-get -qq install libtorrent-rasterbar-dev; fi
+- if [[ "$lt" == "repo" ]]; then sudo apt-get -qq build-dep libtorrent-rasterbar-dev && git clone git://github.com/mirror/libtorrent.git && (cd libtorrent && ./autotool.sh && ./configure $ltc && sudo make install); fi
+
+# osx
+# - export MAKEFLAGS="-j 4"
+# - brew update
+# - brew install libtorrent-rasterbar qt boost
+# - git clone git://github.com/mirror/qconf.git && pushd qconf && ./configure && make install && popd
+
+script:
+# linux, osx
+- mkdir -p build && cd build && mkdir -p install
+
+# linux
+- (cd .. && qt-qconf)
+- ../configure $qtc && sudo make install
+
+# osx
+# - qmake ../qbittorrent.pro && make
+# - function build() { ../configure && colormake install; }
+# - ../configure && sudo colormake install
+# - build
+
