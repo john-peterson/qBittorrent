@@ -117,6 +117,7 @@ QBtSession::QBtSession()
   #endif
   , m_dynDNSUpdater(0)
   , m_alertDispatcher(0)
+  , startupCount(0)
 {
   BigRatioTimer = new QTimer(this);
   BigRatioTimer->setInterval(10000);
@@ -2984,12 +2985,17 @@ void QBtSession::startUpTorrents() {
   QStringList filters;
   filters << "*.torrent";
   const QStringList torrents_on_hd = torrentBackup.entryList(filters, QDir::Files, QDir::Unsorted);
+  startupCount = torrents_on_hd.size();
   foreach (QString hash, torrents_on_hd) {
+    if (!startupCount)
+      break;
     hash.chop(8); // remove trailing .torrent
     if (!known_torrents.contains(hash)) {
       qDebug("found torrent with hash: %s on hard disk", qPrintable(hash));
       std::cerr << "ERROR Detected!!! Adding back torrent " << qPrintable(hash) << " which got lost for some reason." << std::endl;
       addTorrent(torrentBackup.path()+"/"+hash+".torrent", false, QString(), true);
+      //make the gui responsive while adding torrents
+      misc::msleep(100);
     }
   }
   // End of safety measure
@@ -3003,7 +3009,10 @@ void QBtSession::startUpTorrents() {
     }
     qDebug("Priority_queue size: %ld", (long)torrent_queue.size());
     // Resume downloads
+    startupCount = torrent_queue.size();
     while(!torrent_queue.empty()) {
+      if (!startupCount)
+        break;
       const QString hash = torrent_queue.top().second;
       torrent_queue.pop();
       qDebug("Starting up torrent %s", qPrintable(hash));
@@ -3012,17 +3021,24 @@ void QBtSession::startUpTorrents() {
       } else {
         addTorrent(torrentBackup.path()+"/"+hash+".torrent", false, QString(), true);
       }
+      misc::msleep(100);
     }
   } else {
     // Resume downloads
+    startupCount = known_torrents.size();
     foreach (const QString &hash, known_torrents) {
+      if (!startupCount)
+        break;
       qDebug("Starting up torrent %s", qPrintable(hash));
       if (TorrentPersistentData::isMagnet(hash))
         addMagnetUri(TorrentPersistentData::getMagnetUri(hash), true);
       else
         addTorrent(torrentBackup.path()+"/"+hash+".torrent", false, QString(), true);
+      misc::msleep(100);
     }
   }
+  startupCount = 0;
+  emit updateNbTorrents();
   qDebug("Unfinished torrents resumed");
 }
 

@@ -46,6 +46,7 @@
 #include <QScrollBar>
 #include <QMimeData>
 #include <QCryptographicHash>
+#include <QtCore>
 
 #include "mainwindow.h"
 #include "transferlistwidget.h"
@@ -309,19 +310,21 @@ MainWindow::MainWindow(QWidget *parent, const QStringList& torrentCmdLine) : QMa
   connect(executable_watcher, SIGNAL(fileChanged(QString)), this, SLOT(notifyOfUpdate(QString)));
   executable_watcher->addPath(qApp->applicationFilePath());
 
-  // Resume unfinished torrents
-  QBtSession::instance()->startUpTorrents();
-  // Add torrent given on command line
-  processParams(torrentCmdLine);
-
   // Populate the transfer list
+  qRegisterMetaType<QTorrentHandle>();
   transferList->getSourceModel()->populate();
   transferList->setFocus();
 
   // Update the number of torrents (tab)
   updateNbTorrents();
+  connect(QBtSession::instance(), SIGNAL(updateNbTorrents()), this, SLOT(updateNbTorrents()));
   connect(transferList->getSourceModel(), SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(updateNbTorrents()));
   connect(transferList->getSourceModel(), SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(updateNbTorrents()));
+
+  // Resume unfinished torrents
+  QtConcurrent::run(QBtSession::instance(), &QBtSession::startUpTorrents);
+  // Add torrent given on command line
+  processParams(torrentCmdLine);
 
   qDebug("GUI Built");
 #ifdef Q_OS_WIN
@@ -358,7 +361,6 @@ void MainWindow::shutdownCleanUp() {
   guiUpdater->stop();
   status_bar->stopTimer();
   m_pwr->setActivityState(false);
-  QBtSession::drop();
   // Save window size, columns size
   writeSettings();
 #ifdef Q_OS_MAC
@@ -366,6 +368,15 @@ void MainWindow::shutdownCleanUp() {
   setUnifiedTitleAndToolBarOnMac(false);
 #endif
   disconnect(tabs, SIGNAL(currentChanged(int)), this, SLOT(tab_changed(int)));
+
+  // Delete classes that can contain threads here
+  if (rssWidget)
+    delete rssWidget;
+  QBtSession::instance()->startupCount = 0;
+  if (QThreadPool::globalInstance()->activeThreadCount())
+    QThreadPool::globalInstance()->waitForDone();
+  QBtSession::drop();
+
   // Delete other GUI objects
   if (executable_watcher)
     delete executable_watcher;
@@ -385,8 +396,6 @@ void MainWindow::shutdownCleanUp() {
     delete options;
   if (downloadFromURLDialog)
     delete downloadFromURLDialog;
-  if (rssWidget)
-    delete rssWidget;
   if (searchEngine)
     delete searchEngine;
   delete transferListFilters;
@@ -482,7 +491,10 @@ void MainWindow::displaySearchTab(bool enable) {
 }
 
 void MainWindow::updateNbTorrents() {
-  tabs->setTabText(0, tr("Transfers (%1)").arg(transferList->getSourceModel()->rowCount()));
+  if (QBtSession::instance()->startupCount > 0)
+    tabs->setTabText(0, tr("Transfers (%1/%2)").arg(QString::number(transferList->getSourceModel()->rowCount()), QString::number(QBtSession::instance()->startupCount)));
+  else
+    tabs->setTabText(0, tr("Transfers (%1)").arg(transferList->getSourceModel()->rowCount()));
 }
 
 void MainWindow::on_actionWebsite_triggered() const {

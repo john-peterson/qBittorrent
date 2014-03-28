@@ -150,6 +150,7 @@ public:
   quint64 getAlltimeDL() const;
   quint64 getAlltimeUL() const;
   void postTorrentUpdate();
+  int startupCount;
 
 public slots:
   QTorrentHandle addTorrent(QString path, bool fromScanDir = false, QString from_url = QString(), bool resumed = false, bool imported = false);
@@ -299,6 +300,7 @@ signals:
   void metadataReceivedHidden(const QTorrentHandle &h);
   void stateUpdate(const std::vector<libtorrent::torrent_status> &statuses);
   void statsReceived(const libtorrent::stats_alert&);
+  void updateNbTorrents();
 
 private:
   // Bittorrent
